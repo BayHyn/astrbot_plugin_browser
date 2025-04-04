@@ -16,6 +16,8 @@
 直接在astrbot的插件市场搜索astrbot_plugin_browser，点击安装，等待完成即可
 
 ### 第二步，安装浏览器组件
+进入astrbot的虚拟环境，安装firefox，下面是Windows上的示例操作，其他环境同理。
+![tmp719B](https://github.com/user-attachments/assets/7a587972-fd47-41d5-bc0a-26694550be18)
 
 
 ## ⌨️ 使用说明
