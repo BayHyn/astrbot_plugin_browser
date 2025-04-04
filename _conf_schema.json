@@ -1,0 +1,69 @@
+{
+    "viewport_width": {
+        "description": "视口宽度",
+        "type": "int",
+        "hint": "影响截图的宽度",
+        "default": 1920
+    },
+    "viewport_height": {
+        "description": " 视口高度",
+        "type": "int",
+        "hint": "影响截图的高度",
+        "default": 1400
+    },
+    "zoom_factor": {
+        "description": "打开新页面时的默认缩放比例",
+        "type": "float",
+        "hint": "",
+        "default": 1.5
+    },
+    "full_page_zoom_factor": {
+        "description": "查看整页时的默认缩放比例",
+        "type": "int",
+        "hint": "0表示不改变原来的缩放比",
+        "default": 0
+    },
+    "default_search_engine": {
+        "description": "默认使用的搜索引擎",
+        "type": "string",
+        "hint": "可供使用的搜索引擎：...(自行查看收藏夹)",
+        "default": "必应搜索"
+    },
+    "max_pages": {
+        "description": "允许的最大标签页数量",
+        "type": "int",
+        "hint": "打开的标签页超过这个数量时，会自动关闭最开始打开的标签页,（请根据性能设置合适的数量）",
+        "default": 5
+    },
+    "rebuild_ticks_img": {
+        "description": "启动时重新生成浏览器刻度图",
+        "type": "bool",
+        "hint": "浏览器刻度图已存在时，可以换掉这个开关了",
+        "default": false
+    },
+    "cat_log": {
+        "description": "猫猫日志",
+        "type": "object",
+        "hint": "仅在使用NapCat协议端时以下的配置才有效",
+        "items": {
+            "webui_url": {
+                "description": "WebUI地址",
+                "type": "string",
+                "hint": "",
+                "default": "http://127.0.0.1:6099/webui"
+            },
+            "token": {
+                "description": "Token",
+                "type": "string",
+                "hint": "",
+                "default": "napcat"
+            },
+            "dark_themes": {
+                "description": "暗黑主题",
+                "type": "bool",
+                "hint": "",
+                "default": false
+            }
+        }
+    }
+}
