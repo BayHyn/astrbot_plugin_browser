@@ -31,7 +31,7 @@ playwright install-deps
 playwright install firefox
 # 装完用exit命令退出
 ```
-## 🤝 TODO
+## 🤝 配置
 - 请前往插件的配置面板进行配置
   ![tmpA1B7](https://github.com/user-attachments/assets/9ca5bd1a-80fb-41cc-a9d7-acb66c841af7)
 - 网站收藏夹位置如下，可打开进行自定义（后续本插件可能会新增一些管理收藏夹的指令）
@@ -40,6 +40,9 @@ playwright install firefox
 ## ⌨️ 使用说明
 ![tmp4FE5](https://github.com/user-attachments/assets/365e4a07-5ada-4f60-ac0c-c0c562d9633e)
 
+
+## 🤝 TODO
+新增一些管理收藏夹的指令
 
 ## 📌 注意事项
 1. 本插件刚发布初版，可能会存在一些意料之外的bug，欢迎提issue。
