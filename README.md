@@ -29,6 +29,7 @@ sudo docker exec -it astrbot /bin/bash
 pip install playwright
 playwright install-deps
 playwright install firefox
+# 装完用exit命令退出
 ```
 
 ## ⌨️ 使用说明
