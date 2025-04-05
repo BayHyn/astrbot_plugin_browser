@@ -17,11 +17,17 @@
 
 ### 第二步，安装浏览器组件
 进入astrbot的虚拟环境，安装firefox。
-- Windows上的示例操作
+- Windows的示例操作
 ![tmp719B](https://github.com/user-attachments/assets/7a587972-fd47-41d5-bc0a-26694550be18)
-- Linux上的示例操作
+- Linux的示例操作
 ![tmpABFB](https://github.com/user-attachments/assets/646edf2d-22fe-40ad-8876-aad285cf7aca)
-- 其他环境同理。
+- Docker的示例操作
+'''bash
+sudo docker exec -it astrbot /bin/bash
+pip install playwright
+playwright install-deps
+playwright install firefox
+'''
 
 ## ⌨️ 使用说明
 ![tmp4FE5](https://github.com/user-attachments/assets/365e4a07-5ada-4f60-ac0c-c0c562d9633e)
