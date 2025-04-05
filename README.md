@@ -22,8 +22,9 @@
 - Linux的示例操作
 ![tmpABFB](https://github.com/user-attachments/assets/646edf2d-22fe-40ad-8876-aad285cf7aca)
 - Docker的示例操作
-打开bash来安装
+
 ```bash
+# 打开bash来安装
 sudo docker exec -it astrbot /bin/bash
 pip install playwright
 playwright install-deps
