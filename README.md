@@ -22,12 +22,12 @@
 - Linux的示例操作
 ![tmpABFB](https://github.com/user-attachments/assets/646edf2d-22fe-40ad-8876-aad285cf7aca)
 - Docker的示例操作
-'''bash
+```bash
 sudo docker exec -it astrbot /bin/bash
 pip install playwright
 playwright install-deps
 playwright install firefox
-'''
+```
 
 ## ⌨️ 使用说明
 ![tmp4FE5](https://github.com/user-attachments/assets/365e4a07-5ada-4f60-ac0c-c0c562d9633e)
