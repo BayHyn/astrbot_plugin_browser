@@ -10,6 +10,7 @@
 运行时，bot在后台打开一个浏览器，每完成一个交互动作，bot返回一张浏览器界面的截图。
 
 ![tmp89D8](https://github.com/user-attachments/assets/1461c5f4-a918-4930-8ca7-b3a4701bf74c)
+![tmpDD00](https://github.com/user-attachments/assets/72bf743c-792a-48ed-8848-58ff0cfe82cf)
 
 ## 📦 安装
 
