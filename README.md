@@ -9,8 +9,6 @@
 本插件通过操控bot与浏览器交互（搜索、点击、滑动、滚动、缩放、输入、切换标签页、收藏等等），  
 运行时，bot在后台打开一个浏览器，每完成一个交互动作，bot返回一张浏览器界面的截图。
 
-![tmp89D8](https://github.com/user-attachments/assets/1461c5f4-a918-4930-8ca7-b3a4701bf74c)
-![tmpDD00](https://github.com/user-attachments/assets/72bf743c-792a-48ed-8848-58ff0cfe82cf)
 
 ## 📦 安装
 
@@ -18,25 +16,43 @@
 直接在astrbot的插件市场搜索astrbot_plugin_browser，点击安装，等待完成即可
 
 ### 第二步，安装浏览器组件
-进入astrbot的虚拟环境，安装firefox。
-#### -----Windows的示例操作-----
+从终端进入astrbot的虚拟环境，安装firefox。
+#### ------------Windows的示例操作------------
+
+```bash
+# 进入astrbot的根目录
+ cd "你的astrbot的安装路径"  
+
+# 激活虚拟环境
+venv\Scripts\activate
+
+# 安装firefox
+playwright install firefox
+
+# 启动astrbot（当然你也可以通过astrbot面板重启bot）
+python main.py
+```
+
+![tmpDD00](https://github.com/user-attachments/assets/72bf743c-792a-48ed-8848-58ff0cfe82cf)
+
+#### ------------Linux的示例操作------------
 - 进入astrbot的根目录
 ```bash
- cd "你的astrbot的安装路径"
-```
-- 激活虚拟环境
-```bash
-venv\Scripts\activate
-```
-- 安装firefox
-```bash
-playwright install firefox
-```
-![tmp6024](https://github.com/user-attachments/assets/d2cd2c3e-4f77-427f-8c3c-b5407e7b0f6b)
+# 进入astrbot的根目录
+ cd "你的astrbot的安装路径"  
 
-#### -----Linux的示例操作-----
-![tmpABFB](https://github.com/user-attachments/assets/646edf2d-22fe-40ad-8876-aad285cf7aca)
-#### -----Docker的示例操作-----
+# 激活虚拟环境
+source venv\Scripts\activate
+
+# 安装firefox
+playwright install firefox
+
+# 启动astrbot（当然你也可以通过astrbot面板重启bot）
+python main.py
+```
+![tmp89D8](https://github.com/user-attachments/assets/1461c5f4-a918-4930-8ca7-b3a4701bf74c)
+
+#### ------------Docker的示例操作------------
 
 ```bash
 # 打开bash来安装
