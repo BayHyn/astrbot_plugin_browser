@@ -17,16 +17,16 @@
 
 ### 第二步，安装浏览器组件
 进入astrbot的虚拟环境，安装firefox。
-- Windows的示例操作
-1.进入astrbot的根目录
+1.Windows的示例操作
+- 进入astrbot的根目录
 ```bash
  cd "你的astrbot的安装路径"
 ```
-2.激活虚拟环境
+- 激活虚拟环境
 ```bash
 venv\Scripts\activate
 ```
-3.安装firefox
+- 安装firefox
 ```bash
 playwright install firefox
 ```
