@@ -17,7 +17,7 @@
 
 ### 第二步，安装浏览器组件
 进入astrbot的虚拟环境，安装firefox。
-1.Windows的示例操作
+#### Windows的示例操作
 - 进入astrbot的根目录
 ```bash
  cd "你的astrbot的安装路径"
