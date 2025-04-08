@@ -56,45 +56,33 @@
         "default": false
     },
     "astrbot_config": {
-        "description": "astrbot配置",
+        "description": "Astrbot配置",
         "type": "object",
-        "hint": "仅管理员能打开astrbot面板",    
+        "hint": "仅管理员能打开Astrbot面板",    
         "items": {
-            "webui_url": {
-                "description": "WebUI地址",
+            "password": {
+                "description": "Astrbot面板密码",
                 "type": "string",
-                "hint": "",
-                "default": "http://127.0.0.1:6185"
-            },
-            "username": {
-                "description": "用户名",
-                "type": "string",
-                "hint": "",
-                "default": "astrbot"
-            },
-            "token": {
-                "description": "密码",
-                "type": "string",
-                "hint": "",
+                "hint": "Astrbot面板的登录密码",
                 "default": "astrbot"
             }
         }
     },
     "napcat_config": {
-        "description": "napcat配置",
+        "description": "NatCat配置",
         "type": "object",
-        "hint": "仅管理员能打开napcat面板，仅在使用NapCat协议端时以下的配置才有效",
+        "hint": "仅管理员能打开NatCat面板，仅在使用NapCat协议端时以下的配置才有效",
         "items": {
             "webui_url": {
-                "description": "WebUI地址",
+                "description": "NatCat面板端口",
                 "type": "string",
-                "hint": "",
-                "default": "http://127.0.0.1:6099"
+                "hint": "NatCat面板的开放端口一般默认都是6099",
+                "default": "6099"
             },
             "token": {
                 "description": "Token",
                 "type": "string",
-                "hint": "",
+                "hint": "NatCat面板的登录密码",
                 "default": "napcat"
             },
             "dark_themes": {

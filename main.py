@@ -9,6 +9,8 @@ from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core import AstrBotConfig
 from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.config.astrbot_config import AstrBotConfig  # noqa: F811
+from astrbot.core.star.filter.permission import PermissionType
 from .browser import gbm
 from .ticks_overlay import create_ticks_overlay
 import astrbot.core.message.components as Comp
@@ -28,6 +30,7 @@ favorite_set = set(favorite.keys())
 class BrowserPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self.config = config
         self.viewport_width: int = config.get("viewport_width", 1920)  # 视口宽度
         self.viewport_height: int = config.get("viewport_height", 1440)  # 视口高度
         self.zoom_factor: float = config.get("zoom_factor", 1.5)  # 打开新页面时的默认缩放比例
@@ -36,13 +39,18 @@ class BrowserPlugin(Star):
         self.max_pages: int = config.get("max_pages", 6) # 允许的最大标签页数量
         self.delete_file_cookies: bool = config.get("delete_file_cookies", False) # 是否删除文件中的cookies
 
+        # 获取astrbot的配置
         astrbot_config = config.get("astrbot_config", {})
-        self.astrbot_webui_url: str = astrbot_config.get("webui_url", "http://127.0.0.1:6185")
-        self.astrbot_username: str = astrbot_config.get("username", "astrbot")
-        self.astrbot_token: str = astrbot_config.get("token", "astrbot")
+        self.password = astrbot_config.get("password", "astrbot")
+        dashboard_config = AstrBotConfig()["dashboard"]
+        self.dashboard_username = dashboard_config.get("username", "astrbot")
+        self.dashboard_host = dashboard_config.get("host","0.0.0.0")
+        self.dashboard_port = dashboard_config.get("port", 6185)
+        self.astrbot_password = astrbot_config.get("password", "astrbot")
 
+        # 获取napcat的配置
         napcat_config = config.get("napcat_config", {})
-        self.napcat_webui_url: str = napcat_config.get("webui_url", "http://127.0.0.1:6099")
+        self.napcat_port: str = napcat_config.get("napcat_port", "6099")
         self.napcat_token: str = napcat_config.get("token", "napcat")
         self.napcat_dark_themes: bool = napcat_config.get("dark_themes", False)  # 是否使用深色主题
 
@@ -55,36 +63,37 @@ class BrowserPlugin(Star):
     async def help(self, event: AstrMessageEvent):
         """浏览器帮助"""
         help_text = (
-            "浏览器插件帮助：\n"
-            "/搜索 <关键词> -搜索关键词\n"
-            "/访问 <链接> -访问指定链接\n"
-            "/点击 <x> <y> -模拟点击指定坐标\n"
-            "/输入 <文本> <回车> -模拟输入文本\n"
-            "/滑动 <起始X> <起始Y> <结束X> <结束Y> -模拟滑动\n"
-            "/缩放 <缩放比例> -缩放网页\n"
-            "/滚动 <方向> <距离> -滚动网页\n"
-            "/当前页面 <缩放比例> -查看当前标签页的内容\n"
-            "/整页 <缩放比例> -查看当前标签页的整页内容\n"
-            "/上一页 -跳转上一页\n"
-            "/下一页 -跳转下一页\n"
-            "/标签页列表 -查看当前标签页列表\n"
-            "/标签页 <序号> -切换到指定的标签页\n"
-            "/关闭标签页 <序号> -关闭指定的标签页\n"
-            "/关闭浏览器 -关闭浏览器\n"
-            "/收藏夹 -查看收藏夹列表\n"
-            "/收藏 <名称> <链接> -添加收藏\n"
-            "/取消收藏 <名称> -取消收藏\n"
-            "/清空收藏夹 -清空收藏夹\n"
-            "/添加cookie <cookie> -添加cookie(施工中暂不可用...)\n"
-            "/清空cookie -清空cookie\n"
-            "/浏览器设置 <宽度> <高度> <缩放比> -设置浏览器参数\n"
-            "/astrbot面板 -打开astrbot面板\n"
-            "/napcat面板 -打开napcat面板\n"
-            "/浏览器帮助 -查看帮助\n"
-            "可用的收藏网页：\n"
-            + "\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
+            "【浏览器插件帮助】：\n\n"
+            "/搜索 <关键词> -搜索关键词\n\n"
+            "/访问 <链接> -访问指定链接\n\n"
+            "/点击 <x> <y> -模拟点击指定坐标\n\n"
+            "/输入 <文本> <回车> -模拟输入文本\n\n"
+            "/滑动 <起始X> <起始Y> <结束X> <结束Y> -模拟滑动\n\n"
+            "/缩放 <缩放比例> -缩放网页\n\n"
+            "/滚动 <方向> <距离> -滚动网页\n\n"
+            "/当前页面 <缩放比例> -查看当前标签页的内容\n\n"
+            "/整页 <缩放比例> -查看当前标签页的整页内容\n\n"
+            "/上一页 -跳转上一页\n\n"
+            "/下一页 -跳转下一页\n\n"
+            "/标签页列表 -查看当前标签页列表\n\n"
+            "/标签页 <序号> -切换到指定的标签页\n\n"
+            "/关闭标签页 <序号> -关闭指定的标签页\n\n"
+            "/关闭浏览器 -关闭浏览器\n\n"
+            "/收藏夹 -查看收藏夹列表\n\n"
+            "/收藏 <名称> <链接> -添加收藏\n\n"
+            "/取消收藏 <名称> -取消收藏\n\n"
+            "/清空收藏夹 -清空收藏夹\n\n"
+            "/添加cookie <cookie> -添加cookie(施工中暂不可用...)\n\n"
+            "/清空cookie -清空cookie\n\n"
+            "/浏览器设置 <宽度> <高度> <缩放比> -设置浏览器参数\n\n"
+            "/astrbot面板 -打开astrbot面板\n\n"
+            "/napcat面板 -打开napcat面板\n\n"
+            "/浏览器帮助 -查看帮助\n\n"
+            "【可用的搜索触发词】：\n\n"
+            + "、".join(f"{k}" for k in favorite)
         )
-        yield event.plain_result(help_text)
+        url = await self.text_to_image(help_text)
+        yield event.image_result(url)
 
 
 
@@ -306,8 +315,10 @@ class BrowserPlugin(Star):
         if not favorite:
             yield event.plain_result("收藏夹列表为空")
             return
-        favorite_list_str = "\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
-        yield event.plain_result(f"收藏夹列表：\n{favorite_list_str}")
+        favorite_list_str = "收藏夹列表：\n"
+        favorite_list_str += "\n\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
+        url = await self.text_to_image(favorite_list_str)
+        yield event.image_result(url)
 
 
     @filter.command("收藏", alias={"添加收藏"})
@@ -410,15 +421,22 @@ class BrowserPlugin(Star):
         return chain
 
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("astrbot面板", alias={"Astrbot面板"})
     async def open_astrbot_webui(self, event: AstrMessageEvent):
         """打开astrbot面板"""
         group_id = event.get_group_id()
         yield event.plain_result("正在打开astrbot面板...")
+
+        if self.dashboard_host == "0.0.0.0":
+            self.dashboard_host = "127.0.0.1"
+        dashboard_url = f"http://{self.dashboard_host}:{self.dashboard_port}"
+        yield event.plain_result(f"面板地址：{dashboard_url}")
+
         try:
-            await gbm.search(group_id=group_id, url= self.astrbot_webui_url)
-            await gbm.text_input(group_id=group_id, text= self.astrbot_username)
-            await gbm.text_input(group_id=group_id, text= self.astrbot_token)
+            await gbm.search(group_id=group_id, url= dashboard_url)
+            await gbm.text_input(group_id=group_id, text= self.dashboard_username)
+            await gbm.text_input(group_id=group_id, text= self.password)
             chain = await self.screenshot(group_id)
             yield event.chain_result(chain) # type: ignore
 
@@ -427,13 +445,16 @@ class BrowserPlugin(Star):
             yield event.plain_result("Astrbot面板打不开")
 
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("napcat面板", alias={"Napcat面板"})
     async def open_napcat_webui(self, event: AstrMessageEvent):
         """打开napcat面板"""
         group_id = event.get_group_id()
         yield event.plain_result("正在打开napcat面板...")
+
+        napcat_url = f"http://{self.dashboard_host}:{self.napcat_port}" # napcat的host应该是和astrbot的host一致的
         try:
-            await gbm.search(group_id=group_id, url= self.napcat_webui_url)
+            await gbm.search(group_id=group_id, url= napcat_url)
             await gbm.text_input(group_id=group_id, text= self.napcat_token)
             await gbm.click_button(group_id=group_id, button_text="登录")
             if self.napcat_dark_themes:
