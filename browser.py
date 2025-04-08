@@ -55,24 +55,63 @@ class GroupBrowserManager:
             self.browser = None
         return True
 
-    async def save_cookies(self):
-        """保存当前浏览器上下文的cookies"""
+
+    async def add_cookies(self, cookies: list):
+        """添加cookies到当前的浏览器上下文"""
+        if self.context:
+            await self.context.add_cookies(cookies)
+            self.in_memory_cookies = cookies
+        else:
+            raise Exception("浏览器上下文未初始化，请先初始化浏览器。")
+
+    async def get_cookies(self) -> list:
+        """获取当前浏览器上下文的cookies"""
         if self.context:
             cookies = await self.context.cookies()
-            with open(self.cookies_file_path, 'w') as f:
-                json.dump(cookies, f, indent=4)
-            self.in_memory_cookies = cookies
+            return cookies
+        else:
+            raise Exception("浏览器上下文未初始化，请先初始化浏览器。")
+
+
+    async def clear_cookies(self, delete_file_cookies: bool = False):
+        """清除当前浏览器上下文的cookies"""
+        if self.context:
+            await self.context.clear_cookies()
+            self.in_memory_cookies = []
+            if delete_file_cookies:
+                await self.save_cookies()
+        else:
+            raise Exception("浏览器上下文未初始化，请先初始化浏览器。")
 
 
     async def load_cookies(self):
-        """加载cookies到当前的浏览器上下文"""
+        """"从json文件中加载cookies到当前的浏览器上下文"""
         try:
-            with open(self.cookies_file_path, 'r') as f:
+            with open(self.cookies_file_path, "r") as f:
                 cookies = json.load(f)
                 self.in_memory_cookies = cookies
-                await self.context.add_cookies(cookies)
+                if self.context:
+                    await self.context.add_cookies(cookies)
         except FileNotFoundError:
             print("Cookies文件未找到，跳过加载。")
+        except json.JSONDecodeError:
+            print("Cookies文件格式错误，跳过加载。")
+
+
+    async def save_cookies(self):
+        """保存当前浏览器上下文的cookies到json文件中"""
+        if self.context:
+            cookies = await self.context.cookies()
+            with open(self.cookies_file_path, "w") as f:
+                json.dump(cookies, f, indent=4)
+            self.in_memory_cookies = cookies
+        else:
+            # 清空JSON文件中的cookie
+            with open(self.cookies_file_path, "w") as f:
+                json.dump([], f)
+            self.in_memory_cookies = []
+
+
 
     async def zoom_to_scale(self, group_id: str, scale_factor: float) -> str | None:
         """根据提供的缩放比例缩放网页"""
@@ -83,7 +122,7 @@ class GroupBrowserManager:
         await asyncio.sleep(0.5)
         return None
 
-    async def close_tab(self, group_id: str = None, tab_index: int = None) -> str:
+    async def close_tab(self, group_id: str|None = None, tab_index: int|None = None) -> str:
         """关闭指定序号的标签页，并从所有相关数据结构中移除"""
         await self.save_cookies()
         if tab_index is not None:
@@ -124,7 +163,7 @@ class GroupBrowserManager:
             url: str,
             timeout: int = 30000,
             zoom_factor:float=1.5,
-            max_pages: int = 10
+            max_pages: int = 5
     ) -> str | None:
         """访问对应的url,如果有重复页面则直接切换，否则创建新页面"""
         # 初始化浏览器和上下文
@@ -134,20 +173,22 @@ class GroupBrowserManager:
                 if page.url == url:
                     await self.switch_to_tab(group_id, index)
                     return None
-        if len(self.all_pages) > max_pages:
-            await self.close_tab(tab_index=0)  # 如果超过最大标签页数量，移除最早的标签页
+
         try:
-            page = await self.context.new_page()
+            page = await self.context.new_page() # type: ignore
             await page.goto(url=url, timeout=timeout)
             await page.wait_for_load_state("networkidle")
             await page.evaluate(f"document.body.style.zoom = {zoom_factor};")
             self.user_sessions[group_id] = page
             self.all_pages.append(page)
+             # 如果超过最大标签页数量，移除最早的标签页
+            if len(self.all_pages) > max_pages:
+                await self.close_tab(tab_index=0)
             await self.save_cookies()
             return None
         except Exception as e:
             logger.error(f"URL访问失败: {e}")
-            return "搜索失败"
+            return "访问失败"
 
 
     async def click_coord(self, group_id: str, coords: list) -> str | None:
@@ -194,43 +235,53 @@ class GroupBrowserManager:
             await self.save_cookies()
         return None
 
-    async def text_input(self, group_id: str,text: str, coords: list[int] | None = None) -> str | None:
-        """根据坐标或默认第一个输入框输入文本"""
+    async def text_input(self, group_id: str,text: str, enter:bool=True) -> str | None:
+        """在网页上输入文本"""
         if group_id not in self.user_sessions:
             return "页面未打开"
 
-        # 参数有效性验证
-        if coords and (len(coords) != 2 or not all(isinstance(v, int) for v in coords)):
-            return "坐标格式错误，应为[x, y]格式的整数列表"
-
         page = self.user_sessions[group_id]
-        input_elements = await page.query_selector_all("input[type='text'], textarea:not([disabled])")
-
-        target_element = None
-        if coords:
-            target_x, target_y = coords
-            for element in input_elements:
-                box = await element.bounding_box()
-                if not box:
-                    continue
-                if (box["x"] <= target_x <= box["x"] + box["width"] and
-                        box["y"] <= target_y <= box["y"] + box["height"]):
-                    target_element = element
-                    break
-        else:
-            target_element = input_elements[0] if input_elements else None
-
-        error_msg = "未找到匹配坐标的输入框" if coords else "未找到输入框"
-        if not target_element:
-            return error_msg
-        try:
-            await target_element.evaluate("el => el.value = ''")  # 清空内容
-            await target_element.type(text, delay=30)
-            await target_element.press("Enter")
-            await self.save_cookies()
+        await page.wait_for_load_state("networkidle")
+        # 获取所有输入框元素
+        input_elements = await page.query_selector_all('input[type="text"], input[type="email"], input[type="password"]')
+        # 遍历输入框元素，找到第一个空白的输入框
+        for input_element in input_elements:
+            input_value = await input_element.evaluate("el => el.value")
+            if not input_value:
+                # 如果输入框为空，则输入文本
+                await input_element.fill(text)
+                if enter:
+                    await page.keyboard.press("Enter")
+                await asyncio.sleep(1)
+                return None
+            else:
+                # 如果输入框不为空，则跳过
+                continue
+        # 如果所有输入框都不为空，则清空第一个输入框并重新输入文本
+        if input_elements:
+            first_input_element = input_elements[0]
+            await first_input_element.fill("")
+            await first_input_element.fill(text)
+            if enter:
+                await page.keyboard.press("Enter")
+            await asyncio.sleep(1)
             return None
-        except Exception as e:
-            return f"输入操作失败: {str(e)}"
+        else:
+            return "未找到输入框"
+
+
+    async def text_input_by_selector(self, group_id: str, selector: str, text: str) -> str | None:
+        """在指定的选择器元素中输入文本"""
+        if group_id not in self.user_sessions:
+            return "页面未打开"
+        page = self.user_sessions[group_id]
+        await page.wait_for_load_state("networkidle")
+        input_element = await page.query_selector(selector)
+        if input_element is None:
+            return f"未找到选择器【{selector}】对应的元素"
+        await input_element.fill(text)
+        await asyncio.sleep(1)
+        return None
 
 
     async def swipe(self, group_id: str, coords: list) -> str | None:
@@ -249,20 +300,19 @@ class GroupBrowserManager:
         return None
 
     async def scroll_by(self, group_id: str, distance: int, direction: str) -> str | None:
-        """根据提供的距离和方向滚动网页，可选值包括 '向下', '向上', '向左', '向右'"""
+        """根据提供的方向和距离进行滚动操作"""
         if group_id not in self.user_sessions:
             return "页面未打开"
         page = self.user_sessions[group_id]
-        if direction == '向下':
+        await page.wait_for_load_state("networkidle")
+        if direction == "上":
+            await page.evaluate(f"window.scrollBy(0, -{distance});")
+        elif direction == "下":
             await page.evaluate(f"window.scrollBy(0, {distance});")
-        elif direction == '向上':
-            await page.evaluate(f"window.scrollBy(0, {-distance});")
-        elif direction == '向左':
+        elif direction == "左":
             await page.evaluate(f"window.scrollBy(-{distance}, 0);")
-        elif direction == '向右':
+        elif direction == "右":
             await page.evaluate(f"window.scrollBy({distance}, 0);")
-        else:
-            return "无效的方向参数"
         await asyncio.sleep(0.2)
         return None
 
@@ -298,7 +348,7 @@ class GroupBrowserManager:
     async def get_screenshot(
             self,
             group_id: str,
-            zoom_factor: float = None,
+            zoom_factor: float|None = None,
             full_page: bool = False,
             viewport_width: int = 1920,
             viewport_height: int = 1440

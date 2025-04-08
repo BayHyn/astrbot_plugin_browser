@@ -2,16 +2,18 @@ import asyncio
 import re
 import time
 import json
+from datetime import datetime
+from urllib.parse import urlparse
 from astrbot import logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core import AstrBotConfig
 from astrbot.core.platform import AstrMessageEvent
-from .core.browser import gbm
-from .core.ticks_overlay import create_ticks_overlay
+from .browser import gbm
+from .ticks_overlay import create_ticks_overlay
 import astrbot.core.message.components as Comp
 
-
+# 加载收藏夹配置
 FAVORITE_PATH = "data/plugins/astrbot_plugin_browser/resource/favorite.json"
 try:
     with open(FAVORITE_PATH, "r", encoding="utf-8") as file:
@@ -21,34 +23,86 @@ except json.JSONDecodeError as e:
 
 favorite_set = set(favorite.keys())
 
+
 @register("astrbot_plugin_browser", "Zhalslar", "浏览器交互插件", "1.0.0")
-class AdminPlugin(Star):
+class BrowserPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        self.viewport_width: int = config.get('viewport_width')  # 视口宽度
-        self.viewport_height: int = config.get('viewport_height')  # 视口高度
-        self.zoom_factor: float = config.get('zoom_factor')  # 打开新页面时的默认缩放比例
-        self.full_page_zoom_factor: float = config.get('full_page_zoom_factor')  # 查看整页时的默认缩放比例, 0表示不改变原来的缩放比
-        self.default_search_engine: str = config.get('default_search_engine')  # 默认使用的搜索引擎
-        self.max_pages: int = config.get('max_pages') # 允许的最大标签页数量
+        self.viewport_width: int = config.get("viewport_width", 1920)  # 视口宽度
+        self.viewport_height: int = config.get("viewport_height", 1440)  # 视口高度
+        self.zoom_factor: float = config.get("zoom_factor", 1.5)  # 打开新页面时的默认缩放比例
+        self.full_page_zoom_factor: float = config.get("full_page_zoom_factor", 0)  # 查看页时的默认缩放比例, 0表示不改变原来的缩放比
+        self.default_search_engine: str = config.get("default_search_engine", "必应搜索")  # 默认使用的搜索引擎
+        self.max_pages: int = config.get("max_pages", 6) # 允许的最大标签页数量
+        self.delete_file_cookies: bool = config.get("delete_file_cookies", False) # 是否删除文件中的cookies
 
-        cat_log = config.get('cat_log')
-        self.webui_url: str = cat_log.get('webui_url')
-        self.token: str = cat_log.get('token')
-        self.dark_themes: bool = cat_log.get('dark_themes')
+        astrbot_config = config.get("astrbot_config", {})
+        self.astrbot_webui_url: str = astrbot_config.get("webui_url", "http://127.0.0.1:6185")
+        self.astrbot_username: str = astrbot_config.get("username", "astrbot")
+        self.astrbot_token: str = astrbot_config.get("token", "astrbot")
 
-        rebuild_ticks_img: bool = config.get('rebuild_ticks_img') # 启动时重新生成浏览器刻度图
+        napcat_config = config.get("napcat_config", {})
+        self.napcat_webui_url: str = napcat_config.get("webui_url", "http://127.0.0.1:6099")
+        self.napcat_token: str = napcat_config.get("token", "napcat")
+        self.napcat_dark_themes: bool = napcat_config.get("dark_themes", False)  # 是否使用深色主题
+
+        rebuild_ticks_img: bool = config.get("rebuild_ticks_img",True) # 启动时重新生成浏览器刻度图
         if rebuild_ticks_img:
             logger.info("正在重新生成浏览器刻度图...")
             asyncio.create_task(create_ticks_overlay())
 
+    @filter.command("浏览器帮助")
+    async def help(self, event: AstrMessageEvent):
+        """浏览器帮助"""
+        help_text = (
+            "浏览器插件帮助：\n"
+            "/搜索 <关键词> -搜索关键词\n"
+            "/访问 <链接> -访问指定链接\n"
+            "/点击 <x> <y> -模拟点击指定坐标\n"
+            "/输入 <文本> <回车> -模拟输入文本\n"
+            "/滑动 <起始X> <起始Y> <结束X> <结束Y> -模拟滑动\n"
+            "/缩放 <缩放比例> -缩放网页\n"
+            "/滚动 <方向> <距离> -滚动网页\n"
+            "/当前页面 <缩放比例> -查看当前标签页的内容\n"
+            "/整页 <缩放比例> -查看当前标签页的整页内容\n"
+            "/上一页 -跳转上一页\n"
+            "/下一页 -跳转下一页\n"
+            "/标签页列表 -查看当前标签页列表\n"
+            "/标签页 <序号> -切换到指定的标签页\n"
+            "/关闭标签页 <序号> -关闭指定的标签页\n"
+            "/关闭浏览器 -关闭浏览器\n"
+            "/收藏夹 -查看收藏夹列表\n"
+            "/收藏 <名称> <链接> -添加收藏\n"
+            "/取消收藏 <名称> -取消收藏\n"
+            "/清空收藏夹 -清空收藏夹\n"
+            "/添加cookie <cookie> -添加cookie(施工中暂不可用...)\n"
+            "/清空cookie -清空cookie\n"
+            "/浏览器设置 <宽度> <高度> <缩放比> -设置浏览器参数\n"
+            "/astrbot面板 -打开astrbot面板\n"
+            "/napcat面板 -打开napcat面板\n"
+            "/浏览器帮助 -查看帮助\n"
+            "可用的收藏网页：\n"
+            + "\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
+        )
+        yield event.plain_result(help_text)
 
 
-    @filter.command('搜索', alias=favorite_set)
-    async def search(self, event: AstrMessageEvent, keyword:str=None):
-        """/搜索 xxx  /必应搜索 xxx（具体用什么搜索网页请看收藏夹）"""
-        yield event.plain_result(f"稍等...")
+
+    @filter.command("搜索", alias=favorite_set)
+    async def search(self, event: AstrMessageEvent, keyword: str | None = None):
+        """搜索关键词，如/搜索 关键词"""
+        cilent_message_id = None
         group_id = event.get_group_id()
+        bot_message = "正在搜索..."
+        if event.get_platform_name() == "aiocqhttp":
+            # OneBot 11 API “send_msg”可以获取到消息 ID，从而撤回消息
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+            assert isinstance(event, AiocqhttpMessageEvent)
+            client = event.bot
+            cilent_message_id = (await client.send_msg(group_id=int(group_id), message=bot_message)).get("message_id")
+        else:
+            yield event.plain_result(bot_message)
+
         message_str = event.message_str
         selected_engine = next((k for k in favorite_set if k in message_str), self.default_search_engine)
         url = self.format_url(selected_engine, keyword)
@@ -56,22 +110,18 @@ class AdminPlugin(Star):
             group_id=group_id,
             url=url,
             zoom_factor=self.zoom_factor,
-            max_pages= self.max_pages
+            max_pages=self.max_pages
         )
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain)  # type: ignore
+
+        if cilent_message_id and event.get_platform_name() == "aiocqhttp":
+            await client.delete_msg(message_id=cilent_message_id)
 
 
     @filter.command("访问")
-    async def visit(self, event: AstrMessageEvent, url:str=None):
-        """/访问 xxx"""
+    async def visit(self, event: AstrMessageEvent, url:str|None=None):
+        """访问指定链接，如/访问 链接"""
         if not url:
             return
         group_id = event.get_group_id()
@@ -82,122 +132,104 @@ class AdminPlugin(Star):
             zoom_factor=self.zoom_factor,
             max_pages=self.max_pages
         )
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("点击")
     async def click(self, event: AstrMessageEvent, input_x:int=0, input_y:int=0):
-        """模拟点击，如/点击 200 300"""
+        """模拟点击指定坐标，如/点击 200 300"""
         group_id = event.get_group_id()
-        coords = input_x, input_y
+        coords = [input_x, input_y]
         result = await gbm.click_coord(group_id=group_id, coords=coords)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("输入")
-    async def text_input(self, event: AstrMessageEvent, text:str=None, input_x:int=None, input_y:int=None):
-        """向输入框输入文本，如/输入 阿巴阿巴 /输入 阿巴阿巴 200 300"""
+    async def text_input(self, event: AstrMessageEvent):
+        """模拟输入文本，如/输入 文本 回车"""
         group_id = event.get_group_id()
-        coords = [input_x, input_y]  if (input_x and input_y) else None
-        result = await gbm.text_input(group_id=group_id, text=text, coords=coords)
-        if result:
-            yield event.plain_result(result)
+        args = event.get_message_str().strip().split()
+        if len(args) < 2:
+            yield event.plain_result("未指定输入内容")
             return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        text = " ".join(args[:-1])
+        enter = args[-1].lower() in ["回车", "true", "yes", "1"]
+        if not text:
+            yield event.plain_result("请输入文本")
+            return
+        result = await gbm.text_input(group_id=group_id, text=text, enter=enter)
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
+
 
     @filter.command("滑动")
-    async def swipe(self, event: AstrMessageEvent, start_x:int=None, start_y:int=None, end_x:int=None, end_y:int=None):
-        """模拟滑动，如/滑动 200 300 200 500， 即从点(200,300)滑动到点(200,500)"""
+    async def swipe(self, event: AstrMessageEvent, start_x:int|None=None, start_y:int|None=None, end_x:int|None=None, end_y:int|None=None):
+        """模拟滑动，如/滑动 100 200 300 400"""
         group_id = event.get_group_id()
-        coords = start_x, start_y, end_x, end_y
+        coords = [start_x, start_y, end_x, end_y]
         if len(coords) != 4:
             yield event.plain_result("应提供4个整数：起始X，起始Y，结束X，结束Y")
             return
         result = await gbm.swipe(group_id=group_id, coords=coords)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("缩放")
     async def zoom_to_scale(self, event: AstrMessageEvent, scale_factor:float=1.5):
-        """把网页缩放，如/缩放 1.6"""
+        """缩放网页，如/缩放 1.5"""
         group_id = event.get_group_id()
         result = await gbm.zoom_to_scale(group_id=group_id, scale_factor=scale_factor)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
-    @filter.command("滚动", alias={"向下滚动", "向上滚动", "向左滚动", "向右滚动"})
-    async def scroll(self, event: AstrMessageEvent, distance:int=None):
-        """向某个方向滚动网页，如/滚动， /向{上下左右}滚动"""
+    @filter.command("滚动")
+    async def scroll(self, event: AstrMessageEvent) :
+        """滚动网页，如/滚动 上 100"""
         group_id = event.get_group_id()
-        arg = event.message_str.strip().split()[0]
-        distance = distance or (self.viewport_height - 100)
-        if len(arg) == 2:
-            direction = '向下'
-        else:
-            direction = arg[:2]
+        args = event.message_str.strip().split()
+        distance = self.viewport_height - 100
+        direction = "下"
+        for arg in args:
+            if arg.isdigit():
+                distance = int(arg)
+            elif arg in ["上", "下", "左", "右"]:
+                direction = arg
+            else:
+                pass
         result = await gbm.scroll_by(group_id=group_id, distance=distance, direction=direction)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
-    @filter.command("当前页面", alias={"整页"})
-    async def view_full_page(self, event: AstrMessageEvent, zoom_factor:float=None):
-        """查看当前的标签页：/当前页面，整页显示网页：/整页"""
+    @filter.command("当前页面")
+    async def view_page(self, event: AstrMessageEvent, zoom_factor:float|None=None):
+        """查看当前标签页的内容"""
         group_id = event.get_group_id()
-        message_str = event.get_message_str()
-        full_page = "整页" in message_str
-
-        target_zoom_factor = (zoom_factor if zoom_factor else self.full_page_zoom_factor) if full_page else None
-        screenshot  = await gbm.get_screenshot(
+        zoom_factor = zoom_factor or self.zoom_factor
+        if screenshot := await gbm.get_screenshot(
             group_id=group_id,
-            full_page=full_page,
-            zoom_factor=target_zoom_factor
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+            zoom_factor=zoom_factor,
+        ):
+            chain = [Comp.Image.fromBytes(screenshot)]
+            yield event.chain_result(chain) # type: ignore
+
+
+    @filter.command("整页")
+    async def view_full_page(self, event: AstrMessageEvent, zoom_factor:float|None=None):
+        """查看当前标签页的内容，如/当前页面 1.5"""
+        group_id = event.get_group_id()
+        zoom_factor = zoom_factor or self.full_page_zoom_factor or self.zoom_factor
+        if screenshot := await gbm.get_screenshot(
+            group_id=group_id,
+            full_page=True,
+            zoom_factor=zoom_factor
+        ):
+            chain = [Comp.Image.fromBytes(screenshot)]
+            yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("上一页")
@@ -205,15 +237,8 @@ class AdminPlugin(Star):
         """跳转上一页"""
         group_id = event.get_group_id()
         result = await gbm.go_back(group_id=group_id)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("下一页")
@@ -221,47 +246,33 @@ class AdminPlugin(Star):
         """跳转下一页"""
         group_id = event.get_group_id()
         result = await gbm.go_forward(group_id=group_id)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("标签页列表")
     async def get_all_tabs_titles(self, event: AstrMessageEvent):
-        """查看所有标签页的标题"""
+        """查看当前标签页列表"""
         titles = await gbm.get_all_tabs_titles()
         titles_str = ("\n".join(f"{i + 1}. {title}" for i, title in enumerate(titles))) or "暂无打开中的标签页"
         yield event.plain_result(titles_str)
 
 
-    @filter.command("标签页")
+    @filter.command("标签页", alias={"切换标签页"})
     async def switch_to_tab(self, event: AstrMessageEvent, index:int=1):
-        """切换到指定序号的标签页，如/标签页 2"""
+        """切换到指定的标签页，如/标签页 1"""
         group_id = event.get_group_id()
         result = await gbm.switch_to_tab(group_id=group_id, tab_index=index - 1)
-        if result:
-            yield event.plain_result(result)
-            return
-        screenshot = await gbm.get_screenshot(
-            group_id=group_id,
-            viewport_width=self.viewport_width,
-            viewport_height=self.viewport_height,
-        )
-        yield event.chain_result([Comp.Image.fromBytes(screenshot)])
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain) # type: ignore
 
 
     @filter.command("关闭标签页")
     async def close_tab(self, event: AstrMessageEvent):
-        """关闭指定的标签页，如/关闭标签页 1 3 4"""
+        """关闭指定的标签页，如/关闭标签页 1 2 3"""
         group_id = event.get_group_id()
         message_str = event.get_message_str()
-        index_list = [int(num) for num in re.findall(r'\d+', message_str)]
+        index_list = [int(num) for num in re.findall(r"\d+", message_str)]
         if not index_list:  # 如果输入为空，则默认操作为关闭最后一个标签页
             result = await gbm.close_tab(group_id=group_id)
             if result:
@@ -289,27 +300,157 @@ class AdminPlugin(Star):
             yield event.plain_result("没有打开中的浏览器")
 
 
-    @filter.command("猫猫日志")
-    async def handle_cat_log(self, event: AstrMessageEvent):
-        """自动跳转到NapCat的猫猫日志"""
+    @filter.command("收藏夹", alias={"查看收藏夹"})
+    async def favorite_list(self, event: AstrMessageEvent):
+        """查看收藏夹列表"""
+        if not favorite:
+            yield event.plain_result("收藏夹列表为空")
+            return
+        favorite_list_str = "\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
+        yield event.plain_result(f"收藏夹列表：\n{favorite_list_str}")
+
+
+    @filter.command("收藏", alias={"添加收藏"})
+    async def add_favorite(self, event: AstrMessageEvent, name:str|None=None, url:str|None=None):
+        """添加收藏"""
+        if not name or not url:
+            yield event.plain_result("请输入名称和链接")
+            return
+        if name in favorite_set:
+            yield event.plain_result(f" {name} 已收藏过了")
+            return
+        favorite[name] = url
+        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
+            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        yield event.plain_result(f"已收藏：{name}: {url}")
+
+
+    @filter.command("取消收藏")
+    async def delete_favorite(self, event: AstrMessageEvent, name:str|None=None):
+        """取消收藏"""
+        if not name:
+            yield event.plain_result("请输入名称")
+            return
+        if name not in favorite_set:
+            yield event.plain_result(f"{name} 在收藏夹中不存在")
+            return
+        del favorite[name]
+        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
+            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        yield event.plain_result(f"已取消收藏：{name}")
+
+
+    @filter.command("清空收藏夹", alias={"清空收藏"})
+    async def clear_favorite(self, event: AstrMessageEvent):
+
+        if not favorite:
+            yield event.plain_result("收藏夹列表为空")
+            return
+        favorite.clear()
+        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
+            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        yield event.plain_result("已清空收藏夹")
+
+
+    @filter.command("添加cookies")
+    async def add_cookies(self, event: AstrMessageEvent, url:str|None=None, cookies_str:str|None=None):
+        """添加cookie(施工中暂不可用...)"""
+        if not cookies_str:
+            yield event.plain_result("未输入cookies")
+            return
+        if not url:
+            yield event.plain_result("未输入url")
+            return
+        cookies_list = self.parse_cookies(url=url,cookies_str=cookies_str)
+        result = await gbm.add_cookies(cookies=cookies_list)
+
         group_id = event.get_group_id()
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain)
+
+
+    @filter.command("清空cookies", alias={"清除cookies"})
+    async def clear_cookies(self, event: AstrMessageEvent):
+        """清空cookie"""
+        group_id = event.get_group_id()
+        result = await gbm.clear_cookies(delete_file_cookies=False) # TODO: 这里的delete_file_cookie参数需要根据实际情况设置
+        chain = await self.screenshot(group_id, result)
+        yield event.chain_result(chain)
+
+
+    @filter.command("浏览器设置")
+    async def set_browser(self, event: AstrMessageEvent, viewport_width:int|None=None, viewport_height:int|None=None, zoom_factor:float|None=None):
+
+        if viewport_width:
+            self.viewport_width = viewport_width
+        if viewport_height:
+            self.viewport_height = viewport_height
+        if zoom_factor:
+            self.zoom_factor = zoom_factor
+        reply = (
+            f"浏览器参数已设置：\n"
+            f"宽度：{self.viewport_width}\n"
+            f"高度：{self.viewport_height}\n"
+            f"缩放比：{self.zoom_factor}"
+        )
+        yield event.plain_result(reply)
+
+
+    async def screenshot(self, group_id:str, result: str|None=None):
+
+        chain = []
+        if result:
+            chain.append(Comp.Plain(result))
+        if screenshot := await gbm.get_screenshot(
+            group_id=group_id,
+            viewport_width=self.viewport_width,
+            viewport_height=self.viewport_height,
+        ):
+            chain.append(Comp.Image.fromBytes(screenshot))
+        return chain
+
+
+    @filter.command("astrbot面板", alias={"Astrbot面板"})
+    async def open_astrbot_webui(self, event: AstrMessageEvent):
+        """打开astrbot面板"""
+        group_id = event.get_group_id()
+        yield event.plain_result("正在打开astrbot面板...")
         try:
-            await gbm.search(group_id=group_id, url= self.webui_url)
-            await gbm.text_input(group_id=group_id, text= self.token)
-            await gbm.click_button(group_id=group_id, button_text="登录")
-            await gbm.click_button(group_id=group_id, button_text="猫猫日志")
-            if self.dark_themes:
-                await gbm.click_button(group_id=group_id, button_text="切换主题")
-            screenshot_path = await gbm.get_screenshot(group_id=group_id)
-            yield event.image_result(screenshot_path)
+            await gbm.search(group_id=group_id, url= self.astrbot_webui_url)
+            await gbm.text_input(group_id=group_id, text= self.astrbot_username)
+            await gbm.text_input(group_id=group_id, text= self.astrbot_token)
+            chain = await self.screenshot(group_id)
+            yield event.chain_result(chain) # type: ignore
+
         except Exception as e:
-            logger.error(f"猫猫日志打开时出错：{e}")
-            yield event.plain_result("猫猫日志打不开啦~")
+            logger.error(f"Astrbot面板打开时出错：{e}")
+            yield event.plain_result("Astrbot面板打不开")
+
+
+    @filter.command("napcat面板", alias={"Napcat面板"})
+    async def open_napcat_webui(self, event: AstrMessageEvent):
+        """打开napcat面板"""
+        group_id = event.get_group_id()
+        yield event.plain_result("正在打开napcat面板...")
+        try:
+            await gbm.search(group_id=group_id, url= self.napcat_webui_url)
+            await gbm.text_input(group_id=group_id, text= self.napcat_token)
+            await gbm.click_button(group_id=group_id, button_text="登录")
+            if self.napcat_dark_themes:
+                await gbm.click_button(group_id=group_id, button_text="深色主题")
+
+            chain = await self.screenshot(group_id)
+            yield event.chain_result(chain) # type: ignore
+
+        except Exception as e:
+            logger.error(f"Napcat面板打开时出错：{e}")
+            yield event.plain_result("Napcat面板打不开")
+
 
 
     @staticmethod
     def get_current_timestamps():
-        """获取当前的秒级和毫秒级时间戳"""
+        """获取当前时间戳（秒和毫秒）"""
         current_time = time.time()  # 获取当前时间戳（秒）
         timestamp_s = int(current_time)  # 秒级时间戳
         timestamp_ms = int(current_time * 1000)  # 毫秒级时间戳
@@ -317,14 +458,14 @@ class AdminPlugin(Star):
 
 
     def format_url(self, selected_engine, keyword):
-        """根据选定的搜索引擎和关键词格式化URL"""
+        """格式化URL"""
         if selected_engine in  favorite:
             url_template = favorite[selected_engine]
             timestamp_s, timestamp_ms = self.get_current_timestamps()
             params = {
-                'keyword': keyword,
-                'timestamp_s': timestamp_s,
-                'timestamp_ms': timestamp_ms
+                "keyword": keyword,
+                "timestamp_s": timestamp_s,
+                "timestamp_ms": timestamp_ms
             }
             try:
                 formatted_url = url_template.format(**params)
@@ -338,8 +479,47 @@ class AdminPlugin(Star):
         else:
             return ""
 
+    @staticmethod
+    def parse_cookies(url, cookies_str):
+        """将cookies字符串解析为Playwright所需的列表格式"""
+        parsed_url = urlparse(url)
+        domain = f".{parsed_url.netloc}"
+        # 解析cookies字符串
+        cookies_list = []
+        for cookie in cookies_str.split("; "):
+            parts = cookie.split("=", 1)
+            if len(parts) < 2:
+                continue
+            name = parts[0].strip()
+            value = parts[1].strip()
+            # 处理cookie的域名
+            cookie_dict = {
+                "name": name,
+                "value": value,
+                "domain": domain,
+                "path": "/"
+            }
+            # 处理其他属性
+            attributes = cookie.split("; ")
+            for attr in attributes[1:]:
+                key_value = attr.strip().split("=", 1)
+                if len(key_value) == 2:
+                    key, val = key_value
+                    key = key.lower()
+                    val = val.strip()
+                    if key == "expires":
+                        try:
+                            cookie_dict["expires"] = int(datetime.strptime(val, "%a, %d-%b-%Y %H:%M:%S GMT").timestamp())  # noqa: F821
+                        except ValueError:
+                            pass
+                    elif key == "samesite":
+                        cookie_dict["sameSite"] = val.capitalize()
+                else:
+                    key = key_value[0].lower()
+                    if key == "httponly":
+                        cookie_dict["httpOnly"] = True
+                    elif key == "secure":
+                        cookie_dict["secure"] = True
 
-
-
-
-
+            cookies_list.append(cookie_dict)
+        return cookies_list

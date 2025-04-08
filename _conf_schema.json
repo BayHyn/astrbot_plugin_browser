@@ -12,13 +12,13 @@
         "default": 1400
     },
     "zoom_factor": {
-        "description": "打开新页面时的默认缩放比例",
+        "description": "标签页的默认缩放比",
         "type": "float",
         "hint": "",
         "default": 1.5
     },
     "full_page_zoom_factor": {
-        "description": "查看整页时的默认缩放比例",
+        "description": "查看整页时的默认缩放比",
         "type": "int",
         "hint": "0表示不改变原来的缩放比",
         "default": 0
@@ -26,7 +26,15 @@
     "default_search_engine": {
         "description": "默认使用的搜索引擎",
         "type": "string",
-        "hint": "可供使用的搜索引擎：...(自行查看收藏夹)",
+        "hint": "请用'/收藏夹'查看可用链接",
+        "options": [
+            "必应搜索",
+            "谷歌搜索",
+            "百度搜索",
+            "B站搜索",
+            "抖音搜索",
+            "github搜索"
+          ],
         "default": "必应搜索"
     },
     "max_pages": {
@@ -41,16 +49,47 @@
         "hint": "浏览器刻度图已存在时，可以换掉这个开关了",
         "default": false
     },
-    "cat_log": {
-        "description": "猫猫日志",
+    "delete_file_cookies": {
+        "description": "清空cookies时删除存储在json中的cookies",
+        "type": "bool",
+        "hint": "注意这样会导致需要浏览器重启时重新登录",
+        "default": false
+    },
+    "astrbot_config": {
+        "description": "astrbot配置",
         "type": "object",
-        "hint": "仅在使用NapCat协议端时以下的配置才有效",
+        "hint": "仅管理员能打开astrbot面板",    
         "items": {
             "webui_url": {
                 "description": "WebUI地址",
                 "type": "string",
                 "hint": "",
-                "default": "http://127.0.0.1:6099/webui"
+                "default": "http://127.0.0.1:6185"
+            },
+            "username": {
+                "description": "用户名",
+                "type": "string",
+                "hint": "",
+                "default": "astrbot"
+            },
+            "token": {
+                "description": "密码",
+                "type": "string",
+                "hint": "",
+                "default": "astrbot"
+            }
+        }
+    },
+    "napcat_config": {
+        "description": "napcat配置",
+        "type": "object",
+        "hint": "仅管理员能打开napcat面板，仅在使用NapCat协议端时以下的配置才有效",
+        "items": {
+            "webui_url": {
+                "description": "WebUI地址",
+                "type": "string",
+                "hint": "",
+                "default": "http://127.0.0.1:6099"
             },
             "token": {
                 "description": "Token",
