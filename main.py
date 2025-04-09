@@ -431,7 +431,6 @@ class BrowserPlugin(Star):
         if self.dashboard_host == "0.0.0.0":
             self.dashboard_host = "127.0.0.1"
         dashboard_url = f"http://{self.dashboard_host}:{self.dashboard_port}"
-        yield event.plain_result(f"面板地址：{dashboard_url}")
 
         try:
             await gbm.search(group_id=group_id, url= dashboard_url)
