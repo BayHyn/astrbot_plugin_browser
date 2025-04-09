@@ -55,6 +55,24 @@
         "hint": "注意这样会导致需要浏览器重启时重新登录",
         "default": false
     },
+    "banned_words": {
+        "description": "禁止使用的关键词",
+        "type": "list",
+        "hint": "屏蔽含有禁词的搜索请求、访问链接、输入文本",
+        "default": [
+            "pornhub",
+            "色情",
+            "成人",
+            "赌博",
+            "暴力",
+            "政治",
+            "反动",
+            "恐怖",
+            "谣言",
+            "诈骗",
+            "病毒"
+        ]
+    },
     "astrbot_config": {
         "description": "Astrbot配置",
         "type": "object",

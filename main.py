@@ -38,6 +38,7 @@ class BrowserPlugin(Star):
         self.default_search_engine: str = config.get("default_search_engine", "必应搜索")  # 默认使用的搜索引擎
         self.max_pages: int = config.get("max_pages", 6) # 允许的最大标签页数量
         self.delete_file_cookies: bool = config.get("delete_file_cookies", False) # 是否删除文件中的cookies
+        self.banned_wprds: list[str] = config.get("banned_words", [])  # 禁止的关键词列表
 
         # 获取astrbot的配置
         astrbot_config = config.get("astrbot_config", {})
@@ -100,6 +101,12 @@ class BrowserPlugin(Star):
     @filter.command("搜索", alias=favorite_set)
     async def search(self, event: AstrMessageEvent, keyword: str | None = None):
         """搜索关键词，如/搜索 关键词"""
+        if not keyword:
+            yield event.plain_result("未输入搜索关键词")
+            return
+        if any(banned_word in keyword for banned_word in self.banned_wprds):
+            yield event.plain_result("搜索关键词包含禁词")
+            return
         cilent_message_id = None
         group_id = event.get_group_id()
         bot_message = "正在搜索..."
@@ -132,6 +139,10 @@ class BrowserPlugin(Star):
     async def visit(self, event: AstrMessageEvent, url:str|None=None):
         """访问指定链接，如/访问 链接"""
         if not url:
+            yield event.plain_result("未输入链接")
+            return
+        if any(banned_word in url for banned_word in self.banned_wprds):
+            yield event.plain_result("访问链接包含禁词")
             return
         group_id = event.get_group_id()
         yield event.plain_result("访问中...")
@@ -159,7 +170,11 @@ class BrowserPlugin(Star):
     async def text_input(self, event: AstrMessageEvent):
         """模拟输入文本，如/输入 文本 回车"""
         group_id = event.get_group_id()
-        args = event.get_message_str().strip().split()
+        message_str = event.get_message_str()
+        args = message_str.strip().split()
+        if any(banned_word in message_str for banned_word in self.banned_wprds):
+            yield event.plain_result("搜索关键词包含禁词")
+            return
         if len(args) < 2:
             yield event.plain_result("未指定输入内容")
             return
