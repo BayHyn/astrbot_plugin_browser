@@ -79,7 +79,7 @@ playwright install firefox
 
 ## 🕹️ 使用说明
 
-![tmp4FE5](https://github.com/user-attachments/assets/365e4a07-5ada-4f60-ac0c-c0c562d9633e)
+![tmp9666](https://github.com/user-attachments/assets/8d5f44de-1683-47b6-aa2b-4ea4665ed4d8)
 
 ## 🤝 TODO  
 
