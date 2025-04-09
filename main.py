@@ -363,7 +363,7 @@ class BrowserPlugin(Star):
         yield event.plain_result("已清空收藏夹")
 
 
-    @filter.command("添加cookies")
+    @filter.command("添加cookie")
     async def add_cookies(self, event: AstrMessageEvent, url:str|None=None, cookies_str:str|None=None):
         """添加cookie(施工中暂不可用...)"""
         if not cookies_str:
@@ -380,7 +380,7 @@ class BrowserPlugin(Star):
         yield event.chain_result(chain)
 
 
-    @filter.command("清空cookies", alias={"清除cookies"})
+    @filter.command("清空cookie", alias={"清除cookie"})
     async def clear_cookies(self, event: AstrMessageEvent):
         """清空cookie"""
         group_id = event.get_group_id()
