@@ -46,7 +46,7 @@ python main.py
  cd "你的astrbot的安装路径"  
 
 # 激活虚拟环境
-source venv\bin\activate
+source venv/bin/activate
 
 # 安装firefox
 playwright install firefox
