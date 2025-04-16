@@ -1,8 +1,15 @@
+<div align="center">
+
+![:name](https://count.getloli.com/@astrbot_plugin_browser?name=astrbot_plugin_browser&theme=minecraft&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+
 # astrbot_plugin_browser
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![AstrBot](https://img.shields.io/badge/AstrBot-3.4%2B-orange.svg)](https://github.com/Soulter/AstrBot)
+[![GitHub](https://img.shields.io/badge/作者-Zhalslar-blue)](https://github.com/Zhalslar)
+
+</div>
 
 ## 🤝 介绍
 
@@ -94,7 +101,10 @@ playwright install firefox
 ## 📌 注意事项
 
 - 想第一时间得到反馈的可以来作者的插件反馈群（QQ群）：460973561
-- 点个star支持一下呗（右上角的星星）
+
+## 🌟 支持
+
+- Star 这个项目！（右上角的星星）
 
 ## 📜 开源协议
 
