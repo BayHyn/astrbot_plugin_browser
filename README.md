@@ -4,6 +4,8 @@
 
 # astrbot_plugin_browser
 
+_✨ [astrbot](https://github.com/AstrBotDevs/AstrBot) 浏览器对接插件 ✨_  
+
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![AstrBot](https://img.shields.io/badge/AstrBot-3.4%2B-orange.svg)](https://github.com/Soulter/AstrBot)
@@ -105,6 +107,14 @@ playwright install firefox
 ## 🌟 支持
 
 - Star 这个项目！（右上角的星星）
+
+## 👥 贡献指南
+
+欢迎通过以下方式参与项目：
+
+- 🐛 提交 Issue 报告问题
+- 💡 提出新功能建议
+- 🔧 提交 Pull Request 改进代码
 
 ## 📜 开源协议
 
