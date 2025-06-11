@@ -3,90 +3,105 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
-SCALE_PATH = Path("data/plugins/astrbot_plugin_browser/resource/ruler_scale.png")
-SCALE_PATH.parent.mkdir(parents=True, exist_ok=True)
+class TickOverlayManager:
+    def __init__(
+        self,
+        font_path: Path = Path(
+            "data/plugins/astrbot_plugin_browser/resource/kaiti_GB2312.ttf"
+        ),
+        scale_path: Path = Path(
+            "data/plugins/astrbot_plugin_browser/resource/ticks_overlay.png"
+        ),
+        width: int = 4000,
+        height: int = 13000,
+        tick_interval: int = 100,
+        font_size: int = 20,
+    ):
+        self.font_path = font_path
+        self.scale_path = scale_path
+        self.width = width
+        self.height = height
+        self.tick_interval = tick_interval
+        self.font_size = font_size
 
-FONT_PATH: Path = Path("data/plugins/astrbot_plugin_browser/resource/simhei.ttf")
+        # 样式设定
+        self.font_color = (200, 0, 0)
+        self.line_color = (0, 0, 0)
+        self.dot_color = (0, 0, 0)
+        self.major_tick_length_x = 20
+        self.minor_tick_length_x = 10
+        self.major_tick_length_y = 30
+        self.minor_tick_length_y = 15
+        self.dot_radius = 1
 
+    def create_overlay(self):
+        """生成刻度覆盖图并保存为PNG"""
+        img = Image.new("RGBA", (self.width, self.height), color=(255, 255, 255, 0))
+        draw = ImageDraw.Draw(img)
 
-async def create_ticks_overlay():
-    """生成刻度背景图"""
-    width, height = 4000, 13000  # 图片宽高
-    major_tick_length_x = 20  # X轴主刻度线长度
-    minor_tick_length_x = 10  # X轴子刻度线长度
-    major_tick_length_y = 30  # Y轴主刻度线长度
-    minor_tick_length_y = 15  # Y轴子刻度线长度
-    tick_interval = 100  # 刻度间隔
-    font_size = 20  # 字体大小
-    font_color = (200, 0, 0)  # 字体颜色
-    line_color = (0, 0, 0)  # 线条颜色
-    dot_radius = 1  # 点的半径
-    dot_color = (0, 0, 0)  # 点的颜色
+        # 画X轴刻度
+        for x in range(0, self.width + 1, self.tick_interval):
+            draw.line([(x, self.major_tick_length_x), (x, 0)], fill=self.line_color)
+            for j in range(1, 10):
+                minor_x = x - (j * self.tick_interval // 10)
+                if minor_x > 0:
+                    draw.line(
+                        [(minor_x, self.minor_tick_length_x), (minor_x, 0)],
+                        fill=self.line_color,
+                    )
 
+        # 画Y轴刻度
+        for y in range(0, self.height + 1, self.tick_interval):
+            draw.line([(0, y), (self.major_tick_length_y, y)], fill=self.line_color)
+            for j in range(1, 10):
+                minor_y = y + (j * self.tick_interval // 10)
+                if minor_y < self.height:
+                    draw.line(
+                        [(self.minor_tick_length_y, minor_y), (0, minor_y)],
+                        fill=self.line_color,
+                    )
 
-    # 创建具有透明背景的图像
-    img = Image.new('RGBA', (width, height), color=(255, 255, 255, 0))
-    draw = ImageDraw.Draw(img)
+        # 主刻度交点加点
+        for x in range(0, self.width + 1, self.tick_interval):
+            for y in range(0, self.height + 1, self.tick_interval):
+                draw.ellipse(
+                    [
+                        (x - self.dot_radius, y - self.dot_radius),
+                        (x + self.dot_radius, y + self.dot_radius),
+                    ],
+                    fill=self.dot_color,
+                )
 
-    # 绘制X轴和Y轴上的刻度
-    for i in range(0, width + 1, tick_interval):
-        # X轴主刻度
-        draw.line([(i, major_tick_length_x), (i, 0)], fill=line_color)
-        # X轴子刻度
-        for j in range(1, 10):
-            minor_pos = i - (j * tick_interval // 10)
-            if minor_pos > 0:
-                draw.line([(minor_pos, minor_tick_length_x), (minor_pos, 0)], fill=line_color)
-
-    for i in range(0, height + 1, tick_interval):
-        # Y轴主刻度
-        draw.line([(0, i), (major_tick_length_y, i)], fill=line_color)
-        # Y轴子刻度
-        for j in range(1, 10):
-            minor_pos = i + (j * tick_interval // 10)
-            if minor_pos < height:
-                draw.line([(minor_tick_length_y, minor_pos), (0, minor_pos)], fill=line_color)
-    # 在x轴和y轴的每个主刻度交点处画点
-    for x in range(0, width + 1, tick_interval):
-        for y in range(0, height + 1, tick_interval):
-            draw.ellipse(
-                [(x - dot_radius, y - dot_radius), (x + dot_radius, y + dot_radius)],
-                fill=dot_color
+        # 添加文字标签
+        font = ImageFont.truetype(self.font_path, self.font_size)
+        for x in range(0, self.width + 1, self.tick_interval):
+            draw.text(
+                (x, self.major_tick_length_x), str(x), font=font, fill=self.font_color
             )
-    # 添加文字标签
-    font = ImageFont.truetype(str(FONT_PATH), font_size)
-    for i in range(0, width + 1, tick_interval):
-        draw.text((i, major_tick_length_x), str(i), font=font, fill=font_color)
-    for i in range(0, height + 1, tick_interval):
-        draw.text((major_tick_length_y + 5, i), str(i), font=font, fill=font_color)
+        for y in range(0, self.height + 1, self.tick_interval):
+            draw.text(
+                (self.major_tick_length_y + 5, y),
+                str(y),
+                font=font,
+                fill=self.font_color,
+            )
 
-    # 保存图像
-    img.save(str(SCALE_PATH), format = 'PNG')
+        # 保存图片
+        self.scale_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(self.scale_path), format="PNG")
 
+    def overlay_on_background(self, background_bytes: bytes) -> bytes:
+        """将刻度覆盖层叠加到背景图上，自动检查overlay是否存在"""
+        if not self.scale_path.exists():
+            self.create_overlay()
 
-def overlay_ticks_on_background(background_bytes) -> bytes:
-    """将刻度覆盖层叠加到背景图片上"""
-    background = Image.open(BytesIO(background_bytes)).convert("RGBA")
-    overlay = Image.open(SCALE_PATH).convert("RGBA")
+        background = Image.open(BytesIO(background_bytes)).convert("RGBA")
+        overlay = Image.open(self.scale_path).convert("RGBA")
 
-    combined = Image.new("RGBA", background.size)
-    combined.paste(background, (0, 0))  # 将背景图片粘贴到新创建的图像上
-    combined.paste(overlay, (0, 0), overlay)   # 将刻度覆盖层粘贴到新创建的图像的左上角
+        combined = Image.new("RGBA", background.size)
+        combined.paste(background, (0, 0))
+        combined.paste(overlay, (0, 0), overlay)
 
-    output = BytesIO()
-    combined.save(output, format="PNG")
-    return output.getvalue()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        output = BytesIO()
+        combined.save(output, format="PNG")
+        return output.getvalue()

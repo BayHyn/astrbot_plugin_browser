@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 import re
 import time
 import json
@@ -11,22 +12,19 @@ from astrbot.core import AstrBotConfig
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.config.astrbot_config import AstrBotConfig  # noqa: F811
 from astrbot.core.star.filter.permission import PermissionType
-from .browser import gbm
-from .ticks_overlay import create_ticks_overlay
+from .browser import BrowserManager
 import astrbot.core.message.components as Comp
 
-# 加载收藏夹配置
-FAVORITE_PATH = "data/plugins/astrbot_plugin_browser/resource/favorite.json"
-try:
-    with open(FAVORITE_PATH, "r", encoding="utf-8") as file:
-        favorite: dict[str, str] = json.load(file)
-except json.JSONDecodeError as e:
-    logger.error(f"JSON 文件格式错误: {e}")
+favorite_file =Path("data/plugins/astrbot_plugin_browser/resource/favorite.json")
+browser_cookies_file =Path("data/plugins_data/astrbot_plugin_browser/browser_cookies.json")
 
-favorite_set = set(favorite.keys())
-
-
-@register("astrbot_plugin_browser", "Zhalslar", "浏览器交互插件", "1.0.0")
+@register(
+    "astrbot_plugin_browser",
+    "Zhalslar",
+    "浏览器交互插件",
+    "v1.1.3",
+    "https://github.com/Zhalslar/astrbot_plugin_browser",
+)
 class BrowserPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -55,10 +53,29 @@ class BrowserPlugin(Star):
         self.napcat_token: str = napcat_config.get("token", "napcat")
         self.napcat_dark_themes: bool = napcat_config.get("dark_themes", False)  # 是否使用深色主题
 
-        rebuild_ticks_img: bool = config.get("rebuild_ticks_img",True) # 启动时重新生成浏览器刻度图
-        if rebuild_ticks_img:
-            logger.info("正在重新生成浏览器刻度图...")
-            asyncio.create_task(create_ticks_overlay())
+        # 初始化浏览器
+        self.browser = BrowserManager(browser_cookies_file)
+        asyncio.create_task(self.browser.initialize())
+
+        # 初始化 favorite
+        self.favorite: dict[str, str] = {}
+        self._load_favorite()
+
+    def _load_favorite(self):
+        """加载收藏文件，如果不存在则创建空文件"""
+        favorite_file.parent.mkdir(parents=True, exist_ok=True)
+
+        if favorite_file.exists():
+            try:
+                with open(favorite_file, "r", encoding="utf-8") as file:
+                    self.favorite = json.load(file)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 文件格式错误: {e}")
+            except Exception as e:
+                logger.error(f"读取 JSON 文件时发生错误: {e}")
+        else:
+            with open(favorite_file, "w", encoding="utf-8") as file:
+                json.dump({}, file, ensure_ascii=False, indent=2)
 
     @filter.command("浏览器帮助")
     async def help(self, event: AstrMessageEvent):
@@ -91,24 +108,41 @@ class BrowserPlugin(Star):
             "/napcat面板 -打开napcat面板\n\n"
             "/浏览器帮助 -查看帮助\n\n"
             "【可用的搜索触发词】：\n\n"
-            + "、".join(f"{k}" for k in favorite)
+            + "、".join(f"{k}" for k in self.favorite)
         )
         url = await self.text_to_image(help_text)
         yield event.image_result(url)
 
 
 
-    @filter.command("搜索", alias=favorite_set)
-    async def search(self, event: AstrMessageEvent, keyword: str | None = None):
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def search(self, event: AstrMessageEvent):
         """搜索关键词，如/搜索 关键词"""
-        if not keyword:
-            yield event.plain_result("未输入搜索关键词")
+        message_str = event.message_str
+        if not message_str:
             return
+        args = message_str.strip().split(" ")
+        # 解析搜索引擎
+        selected_engine = ""
+        if args[0] == "搜索":
+            selected_engine = self.default_search_engine
+        elif args[0] in self.favorite.keys():
+            selected_engine = args[0]
+        else:
+            return
+
+        # 解析搜索关键词
+        keyword = " ".join(args[1:]) if len(args) > 1 else ""
+
+        # 屏蔽违禁词
         if any(banned_word in keyword for banned_word in self.banned_wprds):
             yield event.plain_result("搜索关键词包含禁词")
             return
+
         cilent_message_id = None
         group_id = event.get_group_id()
+
+
         bot_message = "正在搜索..."
         if event.get_platform_name() == "aiocqhttp":
             # OneBot 11 API “send_msg”可以获取到消息 ID，从而撤回消息
@@ -119,10 +153,11 @@ class BrowserPlugin(Star):
         else:
             yield event.plain_result(bot_message)
 
-        message_str = event.message_str
-        selected_engine = next((k for k in favorite_set if k in message_str), self.default_search_engine)
+        # 拼接URL
         url = self.format_url(selected_engine, keyword)
-        result = await gbm.search(
+
+        # 搜索
+        result = await self.browser.search(
             group_id=group_id,
             url=url,
             zoom_factor=self.zoom_factor,
@@ -146,11 +181,11 @@ class BrowserPlugin(Star):
             return
         group_id = event.get_group_id()
         yield event.plain_result("访问中...")
-        result = await gbm.search(
+        result = await self.browser.search(
             group_id=group_id,
             url=url,
             zoom_factor=self.zoom_factor,
-            max_pages=self.max_pages
+            max_pages=self.max_pages,
         )
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
@@ -161,7 +196,7 @@ class BrowserPlugin(Star):
         """模拟点击指定坐标，如/点击 200 300"""
         group_id = event.get_group_id()
         coords = [input_x, input_y]
-        result = await gbm.click_coord(group_id=group_id, coords=coords)
+        result = await self.browser.click_coord(group_id=group_id, coords=coords)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -170,20 +205,14 @@ class BrowserPlugin(Star):
     async def text_input(self, event: AstrMessageEvent):
         """模拟输入文本，如/输入 文本 回车"""
         group_id = event.get_group_id()
-        message_str = event.get_message_str()
-        args = message_str.strip().split()
-        if any(banned_word in message_str for banned_word in self.banned_wprds):
+        input = event.message_str.removeprefix("输入").strip()
+        if any(banned_word in input for banned_word in self.banned_wprds):
             yield event.plain_result("搜索关键词包含禁词")
             return
-        if len(args) < 2:
+        if not input:
             yield event.plain_result("未指定输入内容")
             return
-        text = " ".join(args[:-1])
-        enter = args[-1].lower() in ["回车", "true", "yes", "1"]
-        if not text:
-            yield event.plain_result("请输入文本")
-            return
-        result = await gbm.text_input(group_id=group_id, text=text, enter=enter)
+        result = await self.browser.text_input(group_id=group_id, text=input)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -196,7 +225,7 @@ class BrowserPlugin(Star):
         if len(coords) != 4:
             yield event.plain_result("应提供4个整数：起始X，起始Y，结束X，结束Y")
             return
-        result = await gbm.swipe(group_id=group_id, coords=coords)
+        result = await self.browser.swipe(group_id=group_id, coords=coords)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -205,7 +234,9 @@ class BrowserPlugin(Star):
     async def zoom_to_scale(self, event: AstrMessageEvent, scale_factor:float=1.5):
         """缩放网页，如/缩放 1.5"""
         group_id = event.get_group_id()
-        result = await gbm.zoom_to_scale(group_id=group_id, scale_factor=scale_factor)
+        result = await self.browser.zoom_to_scale(
+            group_id=group_id, scale_factor=scale_factor
+        )
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -224,7 +255,9 @@ class BrowserPlugin(Star):
                 direction = arg
             else:
                 pass
-        result = await gbm.scroll_by(group_id=group_id, distance=distance, direction=direction)
+        result = await self.browser.scroll_by(
+            group_id=group_id, distance=distance, direction=direction
+        )
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -234,7 +267,7 @@ class BrowserPlugin(Star):
         """查看当前标签页的内容"""
         group_id = event.get_group_id()
         zoom_factor = zoom_factor or self.zoom_factor
-        if screenshot := await gbm.get_screenshot(
+        if screenshot := await self.browser.get_screenshot(
             group_id=group_id,
             zoom_factor=zoom_factor,
         ):
@@ -247,10 +280,8 @@ class BrowserPlugin(Star):
         """查看当前标签页的内容，如/当前页面 1.5"""
         group_id = event.get_group_id()
         zoom_factor = zoom_factor or self.full_page_zoom_factor or self.zoom_factor
-        if screenshot := await gbm.get_screenshot(
-            group_id=group_id,
-            full_page=True,
-            zoom_factor=zoom_factor
+        if screenshot := await self.browser.get_screenshot(
+            group_id=group_id, full_page=True, zoom_factor=zoom_factor
         ):
             chain = [Comp.Image.fromBytes(screenshot)]
             yield event.chain_result(chain) # type: ignore
@@ -260,7 +291,7 @@ class BrowserPlugin(Star):
     async def go_back(self, event: AstrMessageEvent):
         """跳转上一页"""
         group_id = event.get_group_id()
-        result = await gbm.go_back(group_id=group_id)
+        result = await self.browser.go_back(group_id=group_id)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -269,7 +300,7 @@ class BrowserPlugin(Star):
     async def go_forward(self, event: AstrMessageEvent):
         """跳转下一页"""
         group_id = event.get_group_id()
-        result = await gbm.go_forward(group_id=group_id)
+        result = await self.browser.go_forward(group_id=group_id)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -277,7 +308,7 @@ class BrowserPlugin(Star):
     @filter.command("标签页列表")
     async def get_all_tabs_titles(self, event: AstrMessageEvent):
         """查看当前标签页列表"""
-        titles = await gbm.get_all_tabs_titles()
+        titles = await self.browser.get_all_tabs_titles()
         titles_str = ("\n".join(f"{i + 1}. {title}" for i, title in enumerate(titles))) or "暂无打开中的标签页"
         yield event.plain_result(titles_str)
 
@@ -286,7 +317,7 @@ class BrowserPlugin(Star):
     async def switch_to_tab(self, event: AstrMessageEvent, index:int=1):
         """切换到指定的标签页，如/标签页 1"""
         group_id = event.get_group_id()
-        result = await gbm.switch_to_tab(group_id=group_id, tab_index=index - 1)
+        result = await self.browser.switch_to_tab(group_id=group_id, tab_index=index - 1)
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain) # type: ignore
 
@@ -298,7 +329,7 @@ class BrowserPlugin(Star):
         message_str = event.get_message_str()
         index_list = [int(num) for num in re.findall(r"\d+", message_str)]
         if not index_list:  # 如果输入为空，则默认操作为关闭最后一个标签页
-            result = await gbm.close_tab(group_id=group_id)
+            result = await self.browser.close_tab(group_id=group_id)
             if result:
                 yield event.plain_result(result)
                 return
@@ -309,7 +340,9 @@ class BrowserPlugin(Star):
                 yield event.plain_result("所有输入必须是整数序号")
                 return
             for index in index_list:
-                result = await gbm.close_tab(tab_index=index - 1, group_id=group_id)
+                result = await self.browser.close_tab(
+                    tab_index=index - 1, group_id=group_id
+                )
                 if result:
                     yield event.plain_result(result)
 
@@ -317,7 +350,7 @@ class BrowserPlugin(Star):
     @filter.command("关闭浏览器")
     async def close_browser(self, event: AstrMessageEvent):
         """关闭浏览器"""
-        is_closed = await gbm.close_browser()
+        is_closed = await self.browser.close_browser()
         if is_closed:
             yield event.plain_result("浏览器已关闭")
         else:
@@ -327,11 +360,13 @@ class BrowserPlugin(Star):
     @filter.command("收藏夹", alias={"查看收藏夹"})
     async def favorite_list(self, event: AstrMessageEvent):
         """查看收藏夹列表"""
-        if not favorite:
+        if not self.favorite:
             yield event.plain_result("收藏夹列表为空")
             return
         favorite_list_str = "收藏夹列表：\n"
-        favorite_list_str += "\n\n".join(f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(favorite.items()))
+        favorite_list_str += "\n\n".join(
+            f"{i + 1}. {k}: {v}" for i, (k, v) in enumerate(self.favorite.items())
+        )
         url = await self.text_to_image(favorite_list_str)
         yield event.image_result(url)
 
@@ -342,12 +377,12 @@ class BrowserPlugin(Star):
         if not name or not url:
             yield event.plain_result("请输入名称和链接")
             return
-        if name in favorite_set:
+        if name in self.favorite:
             yield event.plain_result(f" {name} 已收藏过了")
             return
-        favorite[name] = url
-        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
-            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        self.favorite[name] = url
+        with open(favorite_file, "w", encoding="utf-8") as file:
+            json.dump(self.favorite, file, ensure_ascii=False, indent=4)
         yield event.plain_result(f"已收藏：{name}: {url}")
 
 
@@ -357,24 +392,24 @@ class BrowserPlugin(Star):
         if not name:
             yield event.plain_result("请输入名称")
             return
-        if name not in favorite_set:
+        if name not in self.favorite:
             yield event.plain_result(f"{name} 在收藏夹中不存在")
             return
-        del favorite[name]
-        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
-            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        del self.favorite[name]
+        with open(favorite_file, "w", encoding="utf-8") as file:
+            json.dump(self.favorite, file, ensure_ascii=False, indent=4)
         yield event.plain_result(f"已取消收藏：{name}")
 
 
     @filter.command("清空收藏夹", alias={"清空收藏"})
     async def clear_favorite(self, event: AstrMessageEvent):
 
-        if not favorite:
+        if not self.favorite:
             yield event.plain_result("收藏夹列表为空")
             return
-        favorite.clear()
-        with open(FAVORITE_PATH, "w", encoding="utf-8") as file:
-            json.dump(favorite, file, ensure_ascii=False, indent=4)
+        self.favorite.clear()
+        with open(favorite_file, "w", encoding="utf-8") as file:
+            json.dump(self.favorite, file, ensure_ascii=False, indent=4)
         yield event.plain_result("已清空收藏夹")
 
 
@@ -388,7 +423,7 @@ class BrowserPlugin(Star):
             yield event.plain_result("未输入url")
             return
         cookies_list = self.parse_cookies(url=url,cookies_str=cookies_str)
-        result = await gbm.add_cookies(cookies=cookies_list)
+        result = await self.browser.add_cookies(cookies=cookies_list)
 
         group_id = event.get_group_id()
         chain = await self.screenshot(group_id, result)
@@ -399,7 +434,9 @@ class BrowserPlugin(Star):
     async def clear_cookies(self, event: AstrMessageEvent):
         """清空cookie"""
         group_id = event.get_group_id()
-        result = await gbm.clear_cookies(delete_file_cookies=False) # TODO: 这里的delete_file_cookie参数需要根据实际情况设置
+        result = await self.browser.clear_cookies(
+            delete_file_cookies=False
+        ) # TODO: 这里的delete_file_cookie参数需要根据实际情况设置
         chain = await self.screenshot(group_id, result)
         yield event.chain_result(chain)
 
@@ -427,7 +464,7 @@ class BrowserPlugin(Star):
         chain = []
         if result:
             chain.append(Comp.Plain(result))
-        if screenshot := await gbm.get_screenshot(
+        if screenshot := await self.browser.get_screenshot(
             group_id=group_id,
             viewport_width=self.viewport_width,
             viewport_height=self.viewport_height,
@@ -448,9 +485,9 @@ class BrowserPlugin(Star):
         dashboard_url = f"http://{self.dashboard_host}:{self.dashboard_port}"
 
         try:
-            await gbm.search(group_id=group_id, url= dashboard_url)
-            await gbm.text_input(group_id=group_id, text= self.dashboard_username)
-            await gbm.text_input(group_id=group_id, text= self.password)
+            await self.browser.search(group_id=group_id, url=dashboard_url)
+            await self.browser.text_input(group_id=group_id, text=self.dashboard_username)
+            await self.browser.text_input(group_id=group_id, text=self.password)
             chain = await self.screenshot(group_id)
             yield event.chain_result(chain) # type: ignore
 
@@ -468,11 +505,11 @@ class BrowserPlugin(Star):
 
         napcat_url = f"http://{self.dashboard_host}:{self.napcat_port}" # napcat的host应该是和astrbot的host一致的
         try:
-            await gbm.search(group_id=group_id, url= napcat_url)
-            await gbm.text_input(group_id=group_id, text= self.napcat_token)
-            await gbm.click_button(group_id=group_id, button_text="登录")
+            await self.browser.search(group_id=group_id, url=napcat_url)
+            await self.browser.text_input(group_id=group_id, text=self.napcat_token)
+            await self.browser.click_button(group_id=group_id, button_text="登录")
             if self.napcat_dark_themes:
-                await gbm.click_button(group_id=group_id, button_text="深色主题")
+                await self.browser.click_button(group_id=group_id, button_text="深色主题")
 
             chain = await self.screenshot(group_id)
             yield event.chain_result(chain) # type: ignore
@@ -494,8 +531,8 @@ class BrowserPlugin(Star):
 
     def format_url(self, selected_engine, keyword):
         """格式化URL"""
-        if selected_engine in  favorite:
-            url_template = favorite[selected_engine]
+        if selected_engine in self.favorite:
+            url_template = self.favorite[selected_engine]
             timestamp_s, timestamp_ms = self.get_current_timestamps()
             params = {
                 "keyword": keyword,

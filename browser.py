@@ -5,20 +5,19 @@ from pathlib import Path
 from astrbot import logger
 from playwright.async_api import async_playwright, Page, BrowserContext
 from typing import Dict, Optional, List
-from .ticks_overlay import overlay_ticks_on_background
+from .ticks_overlay import TickOverlayManager
 
-# cookies存储文件路径
-BROWSER_COOKIES_PATH: Path = Path("data/plugins/astrbot_plugin_browser/resource/browser_cookies.json")
 
-class GroupBrowserManager:
-    def __init__(self):
+class BrowserManager:
+    def __init__(self, browser_cookies_file: Path | str):
         self.playwright = None
         self.browser = None
         self.context: Optional[BrowserContext] = None
         self.user_sessions: Dict[str, Page] = {}  # 每个group_id对应一个Page
         self.all_pages: List[Page] = []
-        self.cookies_file_path = str(BROWSER_COOKIES_PATH)  # 默认cookies文件路径
+        self.cookies_file_path = str(browser_cookies_file)  # cookies文件路径
         self.in_memory_cookies: list = []  # 内存中的cookies副本（保持列表格式）
+        self.tom = TickOverlayManager()
 
     async def initialize(self):
         """初始化浏览器"""
@@ -166,8 +165,7 @@ class GroupBrowserManager:
             max_pages: int = 5
     ) -> str | None:
         """访问对应的url,如果有重复页面则直接切换，否则创建新页面"""
-        # 初始化浏览器和上下文
-        await self.initialize()
+
         if self.all_pages:
             for index, page in enumerate(self.all_pages):
                 if page.url == url:
@@ -234,41 +232,61 @@ class GroupBrowserManager:
             page.remove_listener("popup", on_popup)
             await self.save_cookies()
         return None
-
-    async def text_input(self, group_id: str,text: str, enter:bool=True) -> str | None:
+    async def text_input(self, group_id: str, text: str, enter: bool = True) -> str | None:
         """在网页上输入文本"""
         if group_id not in self.user_sessions:
             return "页面未打开"
 
         page = self.user_sessions[group_id]
         await page.wait_for_load_state("networkidle")
-        # 获取所有输入框元素
-        input_elements = await page.query_selector_all('input[type="text"], input[type="email"], input[type="password"]')
-        # 遍历输入框元素，找到第一个空白的输入框
-        for input_element in input_elements:
-            input_value = await input_element.evaluate("el => el.value")
-            if not input_value:
-                # 如果输入框为空，则输入文本
-                await input_element.fill(text)
+
+        # 选出符合类型但未禁用、未只读的输入框（CSS无法判断可见性）
+        raw_inputs = await page.query_selector_all(
+            """input[type="text"]:not([disabled]):not([readonly]),
+            input[type="email"]:not([disabled]):not([readonly]),
+            input[type="password"]:not([disabled]):not([readonly])"""
+        )
+
+        # 进一步筛选出“可见”的输入框
+        input_elements = []
+        for el in raw_inputs:
+            try:
+                if await el.is_visible():
+                    input_elements.append(el)
+            except Exception as e:
+                print(f"输入框可见性判断失败：{e}")
+
+        if not input_elements:
+            return "未找到可用的输入框"
+
+        # 先找空的输入框
+        for el in input_elements:
+            try:
+                input_value = await el.evaluate("el => el.value")
+                if not input_value:
+                    await el.fill(text)
+                    if enter:
+                        await page.keyboard.press("Enter")
+                    await asyncio.sleep(1)
+                    return None
+            except Exception as e:
+                logger.debug(f"输入失败（空输入框）：{e}")
+                continue
+
+        # 若都非空，清空第一个可用输入框后再填入
+        for el in input_elements:
+            try:
+                await el.fill("")
+                await el.fill(text)
                 if enter:
                     await page.keyboard.press("Enter")
                 await asyncio.sleep(1)
                 return None
-            else:
-                # 如果输入框不为空，则跳过
+            except Exception as e:
+                logger.debug(f"输入失败（兜底清空再填）：{e}")
                 continue
-        # 如果所有输入框都不为空，则清空第一个输入框并重新输入文本
-        if input_elements:
-            first_input_element = input_elements[0]
-            await first_input_element.fill("")
-            await first_input_element.fill(text)
-            if enter:
-                await page.keyboard.press("Enter")
-            await asyncio.sleep(1)
-            return None
-        else:
-            return "未找到输入框"
 
+        return "所有输入框都无法使用"
 
     async def text_input_by_selector(self, group_id: str, selector: str, text: str) -> str | None:
         """在指定的选择器元素中输入文本"""
@@ -367,8 +385,6 @@ class GroupBrowserManager:
             quality=100,
             timeout=30000
         )
-        image:bytes = overlay_ticks_on_background(screenshot)
+        image: bytes = self.tom.overlay_on_background(screenshot)
         return image
 
-
-gbm = GroupBrowserManager()
